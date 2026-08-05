@@ -100,6 +100,7 @@ jobs:
             "zizmor==$ZIZMOR_VERSION"
           ansible-galaxy collection install --force -r ansible/requirements.yml
           TOOL_BIN_DIR="$RUNNER_TEMP/tools" scripts/install_ci_tools.sh
+          export PATH="$RUNNER_TEMP/tools:$PATH"
           tflint --init --config "$GITHUB_WORKSPACE/.tflint.hcl"
 
       - name: Authenticate with GitHub OIDC
