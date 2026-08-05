@@ -12,7 +12,7 @@ variable "aws_region" {
 variable "github_owner" {
   description = "Exact GitHub repository owner used in OIDC subject conditions."
   type        = string
-  default     = "octavarium-digital-partners"
+  default     = "renanfenrich"
 
   validation {
     condition     = can(regex("^[A-Za-z0-9_.-]+$", var.github_owner))
@@ -41,4 +41,3 @@ variable "owner" {
   type        = string
   default     = "platform-security"
 }
-

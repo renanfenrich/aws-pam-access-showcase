@@ -7,7 +7,7 @@ The separate `bootstrap/` root creates the encrypted/versioned S3 backend, nativ
 ```hcl
 aws_region                 = "us-east-1"
 name_suffix                = "unique01"
-github_owner               = "octavarium-digital-partners"
+github_owner               = "renanfenrich"
 github_repository          = "aws-pam-access-showcase"
 create_github_oidc_provider = true
 ```
