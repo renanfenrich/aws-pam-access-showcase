@@ -51,8 +51,8 @@ resource "terraform_data" "deployment_gate" {
       error_message = "An explicit expiration tag is required."
     }
     precondition {
-      condition     = can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+", var.deployment_role_arn))
-      error_message = "deployment_role_arn must be the bootstrap-created GitHub deployment role ARN."
+      condition     = can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+", var.deployment_role_arn)) && endswith(var.deployment_role_arn, "-github-deploy")
+      error_message = "deployment_role_arn must be the bootstrap-created GitHub deployment role ARN ending in -github-deploy."
     }
     precondition {
       condition     = can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:policy/aws-pam-.+", var.permissions_boundary_arn))
