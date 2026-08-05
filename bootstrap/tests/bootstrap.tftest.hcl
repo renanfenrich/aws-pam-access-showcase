@@ -216,4 +216,13 @@ run "least_privilege_policy_regressions" {
     ])
     error_message = "Every Terraform role must be able to refresh the exact transfer bucket."
   }
+
+  assert {
+    condition = (
+      strcontains(local.deploy_policy_documents.services, "logs:CreateLogDelivery") &&
+      strcontains(local.destroy_policy_documents.services, "logs:DeleteLogDelivery") &&
+      !strcontains(local.deploy_policy_documents.services, "logs:DeleteLogDelivery")
+    )
+    error_message = "S3 flow-log delivery permissions must remain split between deploy and destroy."
+  }
 }

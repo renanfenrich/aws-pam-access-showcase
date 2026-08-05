@@ -765,6 +765,12 @@ locals {
       Statement = [
         local.global_read_statement,
         {
+          Sid      = "CreateS3FlowLogDelivery"
+          Effect   = "Allow"
+          Action   = ["logs:CreateLogDelivery"]
+          Resource = "*"
+        },
+        {
           Sid       = "CreateTaggedSecrets"
           Effect    = "Allow"
           Action    = ["secretsmanager:CreateSecret"]
@@ -923,6 +929,12 @@ locals {
       Version = "2012-10-17"
       Statement = [
         local.global_read_statement,
+        {
+          Sid      = "DeleteS3FlowLogDelivery"
+          Effect   = "Allow"
+          Action   = ["logs:DeleteLogDelivery"]
+          Resource = "*"
+        },
         {
           Sid      = "RevokeVpnThroughApprovedDocument"
           Effect   = "Allow"

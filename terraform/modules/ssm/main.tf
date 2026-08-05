@@ -119,7 +119,12 @@ resource "aws_s3_bucket_lifecycle_configuration" "transfer" {
 }
 
 locals {
-  approved_principals = concat([var.deployment_role_arn], [for role in aws_iam_role.instance : role.arn])
+  github_role_prefix = trimsuffix(var.deployment_role_arn, "-deploy")
+  approved_principals = concat([
+    var.deployment_role_arn,
+    "${local.github_role_prefix}-plan",
+    "${local.github_role_prefix}-destroy",
+  ], [for role in aws_iam_role.instance : role.arn])
 }
 
 data "aws_iam_policy_document" "transfer_bucket" {

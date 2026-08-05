@@ -75,6 +75,13 @@ def test_openvpn_eip_does_not_force_instance_replacement() -> None:
     assert "ignore_changes = [associate_public_ip_address]" in openvpn
 
 
+def test_transfer_bucket_allows_each_exact_workflow_role() -> None:
+    ssm = (ROOT / "terraform/modules/ssm/main.tf").read_text(encoding="utf-8")
+    assert 'github_role_prefix = trimsuffix(var.deployment_role_arn, "-deploy")' in ssm
+    assert '"${local.github_role_prefix}-plan"' in ssm
+    assert '"${local.github_role_prefix}-destroy"' in ssm
+
+
 def test_deployment_interlock_defaults_off() -> None:
     variables = (ROOT / "terraform/environments/showcase/variables.tf").read_text(encoding="utf-8")
     match = re.search(r'variable "deployment_enabled"\s*\{(?P<body>.*?)\n\}', variables, re.DOTALL)
