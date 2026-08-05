@@ -1,0 +1,8 @@
+deployment_enabled       = true
+deployment_id            = "demo01"
+permissions_boundary_arn = "arn:aws:iam::123456789012:policy/aws-pam-example-workload-boundary"
+operator_cidr            = "203.0.113.10/32"
+authorization_expiration = "2026-08-06T18:00:00Z"
+expiration               = "2026-08-07"
+deployment_role_arn      = "arn:aws:iam::123456789012:role/aws-pam-REPLACE-github-deploy"
+budget_email             = "operator@example.com"

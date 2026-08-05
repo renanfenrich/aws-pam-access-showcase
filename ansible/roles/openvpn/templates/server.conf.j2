@@ -1,0 +1,23 @@
+port 1194
+proto udp
+dev tun
+topology subnet
+server {{ vpn_client_network }} {{ vpn_client_netmask }}
+push "route {{ jumpserver_private_ip }} 255.255.255.255"
+ca /etc/openvpn/server/pki/ca.crt
+cert /etc/openvpn/server/pki/server.crt
+key /etc/openvpn/server/pki/server.key
+crl-verify /etc/openvpn/server/pki/crl.pem
+dh none
+ecdh-curve prime256v1
+tls-crypt /etc/openvpn/server/pki/tls-crypt.key
+tls-version-min 1.2
+cipher AES-256-GCM
+auth SHA256
+keepalive 10 60
+persist-key
+persist-tun
+user nobody
+group nobody
+explicit-exit-notify 1
+verb 3

@@ -1,0 +1,18 @@
+title = "aws-pam-access-showcase"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Generated local tooling and test caches are not repository content"
+paths = [
+  '''(^|/)\.ansible/''',
+  '''(^|/)\.mypy_cache/''',
+  '''(^|/)\.pytest_cache/''',
+  '''(^|/)\.ruff_cache/''',
+  '''(^|/)\.terraform/''',
+  '''(^|/)\.tools/''',
+  '''(^|/)\.venv/''',
+  '''(^|/)__pycache__/''',
+  '''(^|/)aws_pam_access_showcase\.egg-info/''',
+]

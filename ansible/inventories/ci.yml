@@ -1,0 +1,22 @@
+---
+all:
+  vars:
+    aws_region: us-east-1
+    deployment_id: syntax-check
+    vpn_client_cidr: 10.250.0.0/24
+    vpn_client_network: 10.250.0.0
+    vpn_client_netmask: 255.255.255.0
+    openvpn_private_ip: 10.42.0.10
+    openvpn_public_ip: 198.51.100.10
+    jumpserver_private_ip: 10.42.10.10
+    sensitive_private_ip: 10.42.20.10
+    authorization_expiration: "2099-01-01T00:00:00Z"
+    secret_names: {}
+    log_groups: {}
+  children:
+    openvpn:
+      hosts: {}
+    jumpserver:
+      hosts: {}
+    sensitive_resource:
+      hosts: {}

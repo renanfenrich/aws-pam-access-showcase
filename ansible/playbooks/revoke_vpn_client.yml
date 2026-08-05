@@ -1,0 +1,11 @@
+---
+- name: Revoke the single OpenVPN demo client
+  hosts: openvpn
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Revoke the client certificate and publish a new CRL
+      ansible.builtin.command: /usr/local/sbin/revoke-demo-vpn-client
+      register: revoke_result
+      changed_when: "'revoked' in revoke_result.stdout"
+      no_log: true

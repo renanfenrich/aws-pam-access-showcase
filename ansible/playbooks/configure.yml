@@ -1,0 +1,26 @@
+---
+- name: Apply common hardening
+  hosts: all
+  become: true
+  gather_facts: true
+  roles:
+    - role: common
+
+- name: Configure isolated private resource
+  hosts: sensitive_resource
+  become: true
+  roles:
+    - role: sensitive_resource
+
+- name: Configure OpenVPN Community Edition
+  hosts: openvpn
+  become: true
+  roles:
+    - role: openvpn
+
+- name: Configure JumpServer Community Edition
+  hosts: jumpserver
+  become: true
+  roles:
+    - role: jumpserver
+    - role: jumpserver_bootstrap

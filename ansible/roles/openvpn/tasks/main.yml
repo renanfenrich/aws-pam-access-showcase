@@ -1,0 +1,119 @@
+---
+- name: Install OpenVPN Community Edition and firewall tooling
+  ansible.builtin.dnf:
+    name:
+      - nftables
+      - openvpn
+      - python3-boto3
+    state: present
+
+- name: Read the OpenVPN PKI bundle
+  ansible.builtin.set_fact:
+    openvpn_pki: >-
+      {{ lookup('amazon.aws.aws_secret', secret_names['openvpn-ca'], region=aws_region) | from_json }}
+  no_log: true
+
+- name: Create OpenVPN configuration directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  loop:
+    - /etc/openvpn/server
+    - /etc/openvpn/server/pki
+
+- name: Install OpenVPN private PKI material
+  ansible.builtin.copy:
+    dest: "/etc/openvpn/server/pki/{{ item.name }}"
+    content: "{{ item.content }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - { name: ca.key, content: "{{ openvpn_pki.ca_key }}" }
+    - { name: server.key, content: "{{ openvpn_pki.server_key }}" }
+    - { name: tls-crypt.key, content: "{{ openvpn_pki.tls_crypt_key }}" }
+  no_log: true
+  notify: Restart OpenVPN
+
+- name: Install OpenVPN public PKI material
+  ansible.builtin.copy:
+    dest: "/etc/openvpn/server/pki/{{ item.name }}"
+    content: "{{ item.content }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - { name: ca.crt, content: "{{ openvpn_pki.ca_cert }}" }
+    - { name: server.crt, content: "{{ openvpn_pki.server_cert }}" }
+    - { name: crl.pem, content: "{{ openvpn_pki.crl }}" }
+  no_log: true
+  notify: Restart OpenVPN
+
+- name: Install narrow-route OpenVPN server configuration
+  ansible.builtin.template:
+    src: server.conf.j2
+    dest: /etc/openvpn/server/server.conf
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Restart OpenVPN
+
+- name: Enable IPv4 forwarding only for the VPN router
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    sysctl_set: true
+    reload: true
+
+- name: Install explicit VPN forwarding policy
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/sysconfig/nftables.conf
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Reload OpenVPN firewall
+
+- name: Enable the OpenVPN host firewall
+  ansible.builtin.systemd_service:
+    name: nftables
+    enabled: true
+    state: started
+
+- name: Install client revocation helper
+  ansible.builtin.copy:
+    src: revoke_vpn_client.py
+    dest: /usr/local/libexec/revoke_vpn_client.py
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Configure client revocation helper
+  ansible.builtin.copy:
+    dest: /etc/aws-pam-vpn.json
+    owner: root
+    group: root
+    mode: "0600"
+    content: >-
+      {{ {'region': aws_region, 'ca_secret': secret_names['openvpn-ca'],
+          'profile_secret': secret_names['openvpn-demo-client-profile']} | to_json }}
+
+- name: Install revocation entry point
+  ansible.builtin.copy:
+    dest: /usr/local/sbin/revoke-demo-vpn-client
+    owner: root
+    group: root
+    mode: "0700"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      exec /usr/bin/python3 /usr/local/libexec/revoke_vpn_client.py
+
+- name: Enable OpenVPN Community Edition
+  ansible.builtin.systemd_service:
+    name: openvpn-server@server
+    enabled: true
+    state: started

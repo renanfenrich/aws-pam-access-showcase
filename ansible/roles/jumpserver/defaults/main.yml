@@ -1,0 +1,13 @@
+---
+jumpserver_version: v4.10.18
+jumpserver_installer_sha256: 7a0b5291ee2952e735aaff18d494a86fe804aad93fc2dfe3d4c363afbf7069d3
+jumpserver_docker_version: 29.6.1
+jumpserver_docker_sha256: b0df4a43a98d7ecb708acbdb5a34a3416e13b6e39bcbbdf296f51f0f3442b29f
+jumpserver_docker_compose_version: v2.40.3
+jumpserver_docker_compose_sha256: dba9d98e1ba5bfe11d88c99b9bd32fc4a0624a30fafe68eea34d61a3e42fd372
+jumpserver_images:
+  core: jumpserver/core@sha256:13ad1f867689f0f6ca96048a953f877e8592bc211abaa785f142051814ff5337
+  koko: jumpserver/koko@sha256:a42983d30eab6aa633be6749dea48b28449a8c7a2778d6d215481ab9d2582eee
+  web: jumpserver/web@sha256:ab763804b58bfa1e2098d8503dc71378deacf92ad859b460d55fc53bae580924
+  postgresql: postgres@sha256:38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74
+  redis: redis@sha256:a9cc41d6d01da2aa26c219e4f99ecbeead955a7b656c1c499cce8922311b2514
