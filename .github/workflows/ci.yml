@@ -1,0 +1,55 @@
+---
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-validation:
+    name: Credential-free static validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.15.8
+          terraform_wrapper: false
+
+      - name: Install pinned validation dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          source versions.env
+          python -m pip install --disable-pip-version-check \
+            ".[dev]" \
+            "ansible-core==$ANSIBLE_CORE_VERSION" \
+            "ansible-lint==$ANSIBLE_LINT_VERSION" \
+            "yamllint==$YAMLLINT_VERSION" \
+            "zizmor==$ZIZMOR_VERSION"
+          ansible-galaxy collection install --force -r ansible/requirements.yml
+          TOOL_BIN_DIR="$RUNNER_TEMP/tools" scripts/install_ci_tools.sh
+          tflint --init --config "$GITHUB_WORKSPACE/.tflint.hcl"
+
+      - name: Run credential-free CI
+        run: make ci

@@ -1,0 +1,132 @@
+---
+name: Destroy showcase
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: Exact commit SHA on main
+        required: true
+        type: string
+      aws_region:
+        description: AWS region
+        required: true
+        default: us-east-1
+        type: string
+      deployment_id:
+        description: Deployment identifier to destroy
+        required: true
+        type: string
+      confirmation:
+        description: Type DESTROY
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aws-pam-access-showcase
+  cancel-in-progress: false
+
+jobs:
+  destroy:
+    name: Revoke and destroy protected showcase
+    if: github.ref_name == 'main'
+    environment: showcase-destroy
+    permissions:
+      contents: read
+      id-token: write # Exchange GitHub's OIDC token for the destroy role.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+      TF_VAR_deployment_enabled: "true"
+      TF_VAR_aws_region: ${{ inputs.aws_region }}
+      TF_VAR_deployment_id: ${{ inputs.deployment_id }}
+      TF_VAR_operator_cidr: ${{ vars.OPERATOR_CIDR }}
+      TF_VAR_authorization_expiration: ${{ vars.AUTHORIZATION_EXPIRATION }}
+      TF_VAR_expiration: ${{ vars.EXPIRATION }}
+      TF_VAR_deployment_role_arn: ${{ vars.DEPLOY_ROLE_ARN }}
+      AWS_REGION: ${{ inputs.aws_region }}
+      REQUESTED_GIT_REF: ${{ inputs.git_ref }}
+      REQUESTED_DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+      EXPECTED_DEPLOYMENT_ID: ${{ vars.DEPLOYMENT_ID }}
+      DESTROY_CONFIRMATION: ${{ inputs.confirmation }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_STATE_KMS_KEY_ARN: ${{ vars.TF_STATE_KMS_KEY_ARN }}
+    steps:
+      - name: Validate explicit confirmation
+        run: |
+          [[ "$DESTROY_CONFIRMATION" == DESTROY ]] || { echo "confirmation must equal DESTROY" >&2; exit 2; }
+          [[ "$REQUESTED_DEPLOYMENT_ID" == "$EXPECTED_DEPLOYMENT_ID" ]] || { echo "deployment identifier mismatch" >&2; exit 2; }
+
+      - name: Check out exact reviewed commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.git_ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require the exact commit to belong to main
+        run: |
+          [[ "$(git rev-parse HEAD)" == "$REQUESTED_GIT_REF" ]]
+          git merge-base --is-ancestor HEAD origin/main
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.15.8
+          terraform_wrapper: false
+
+      - name: Install pinned destroy dependencies
+        run: |
+          source versions.env
+          python -m pip install --disable-pip-version-check .
+
+      - name: Authenticate with the destroy-only role
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ vars.DESTROY_ROLE_ARN }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: github-showcase-destroy
+
+      - name: Initialize protected remote state
+        run: |
+          terraform -chdir=terraform/environments/showcase init -reconfigure \
+            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="key=showcase/terraform.tfstate" \
+            -backend-config="region=$AWS_REGION" \
+            -backend-config="kms_key_id=$TF_STATE_KMS_KEY_ARN" \
+            -backend-config="encrypt=true" \
+            -backend-config="use_lockfile=true"
+
+      - name: Capture final sanitized inventory
+        run: python scripts/final_inventory.py --terraform-dir terraform/environments/showcase --output evidence/final-inventory.json
+
+      - name: Revoke the OpenVPN demo client
+        run: python scripts/revoke_vpn_client.py --terraform-dir terraform/environments/showcase --region "$AWS_REGION"
+
+      - name: Destroy non-bootstrap resources and schedule secret deletion
+        run: terraform -chdir=terraform/environments/showcase destroy -auto-approve -no-color >/dev/null
+
+      - name: Fail if chargeable tagged resources remain
+        run: python scripts/verify_destroy.py --deployment-id "$REQUESTED_DEPLOYMENT_ID" --region "$AWS_REGION" --output evidence/destroy-verification.json
+
+      - name: Upload final sanitized evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: aws-pam-destroy-${{ inputs.deployment_id }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Clean runner secret files
+        if: always()
+        run: scripts/cleanup_runner_secrets.sh

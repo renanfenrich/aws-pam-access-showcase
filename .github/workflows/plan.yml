@@ -1,0 +1,99 @@
+---
+name: Terraform plan
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aws-pam-access-showcase-state
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Plan with read-only AWS role
+    environment: showcase-plan
+    permissions:
+      contents: read
+      id-token: write # Exchange GitHub's OIDC token for the plan role.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+      TF_VAR_deployment_enabled: "true"
+      TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+      TF_VAR_deployment_id: ${{ vars.DEPLOYMENT_ID }}
+      TF_VAR_operator_cidr: ${{ vars.OPERATOR_CIDR }}
+      TF_VAR_authorization_expiration: ${{ vars.AUTHORIZATION_EXPIRATION }}
+      TF_VAR_expiration: ${{ vars.EXPIRATION }}
+      TF_VAR_deployment_role_arn: ${{ vars.DEPLOY_ROLE_ARN }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_STATE_REGION: ${{ vars.AWS_REGION }}
+      TF_STATE_KMS_KEY_ARN: ${{ vars.TF_STATE_KMS_KEY_ARN }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.15.8
+          terraform_wrapper: false
+
+      - name: Authenticate with the plan-only AWS role
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ vars.PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: github-showcase-plan
+
+      - name: Initialize remote state with native S3 locking
+        run: |
+          terraform -chdir=terraform/environments/showcase init -reconfigure \
+            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="key=showcase/terraform.tfstate" \
+            -backend-config="region=$TF_STATE_REGION" \
+            -backend-config="kms_key_id=$TF_STATE_KMS_KEY_ARN" \
+            -backend-config="encrypt=true" \
+            -backend-config="use_lockfile=true"
+
+      - name: Create a fresh plan without printing values
+        id: terraform-plan
+        shell: bash
+        run: |
+          set +e
+          terraform -chdir=terraform/environments/showcase plan \
+            -detailed-exitcode -no-color -out="$RUNNER_TEMP/showcase.tfplan" >/dev/null
+          exit_code=$?
+          set -e
+          if [[ $exit_code -ne 0 && $exit_code -ne 2 ]]; then
+            exit "$exit_code"
+          fi
+          printf 'exit_code=%s\n' "$exit_code" >> "$GITHUB_OUTPUT"
+
+      - name: Publish sanitized summary and block destructive changes
+        shell: bash
+        run: |
+          terraform -chdir=terraform/environments/showcase show -json "$RUNNER_TEMP/showcase.tfplan" > "$RUNNER_TEMP/plan.json"
+          summary_status=0
+          python scripts/plan_summary.py "$RUNNER_TEMP/plan.json" "$RUNNER_TEMP/plan-summary.md" || summary_status=$?
+          cat "$RUNNER_TEMP/plan-summary.md" >> "$GITHUB_STEP_SUMMARY"
+          exit "$summary_status"
+
+      - name: Remove local plan data
+        if: always()
+        shell: bash
+        run: |
+          shred -u "$RUNNER_TEMP/showcase.tfplan" "$RUNNER_TEMP/plan.json" 2>/dev/null || true
