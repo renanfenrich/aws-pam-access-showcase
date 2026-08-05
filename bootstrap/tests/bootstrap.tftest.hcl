@@ -159,4 +159,24 @@ run "least_privilege_policy_regressions" {
     condition     = alltrue([for policy in values(aws_iam_policy.deploy) : length(policy.policy) <= 6144]) && alltrue([for policy in values(aws_iam_policy.destroy) : length(policy.policy) <= 6144])
     error_message = "Each managed policy must remain within the IAM 6,144-character limit."
   }
+
+  assert {
+    condition = !strcontains(join("", concat(
+      values(local.deploy_policy_documents),
+      values(local.destroy_policy_documents),
+      [local.plan_policy],
+    )), "resourcegroupstaggingapi:")
+    error_message = "Resource Groups Tagging API permissions must use the tag service prefix."
+  }
+
+  assert {
+    condition = alltrue([
+      for action in flatten([
+        for policy in concat(values(local.deploy_policy_documents), values(local.destroy_policy_documents)) : flatten([
+          for statement in jsondecode(policy).Statement : flatten([statement.Action])
+        ])
+      ]) : !contains(["budgets:CreateBudget", "budgets:DeleteBudget"], action)
+    ])
+    error_message = "AWS Budgets create and delete operations must use budgets:ModifyBudget."
+  }
 }
