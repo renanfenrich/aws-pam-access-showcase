@@ -19,6 +19,11 @@ mock_provider "aws" {
       arn = "arn:aws:sns:us-east-1:123456789012:budget-alerts"
     }
   }
+  mock_resource "aws_s3_bucket" {
+    defaults = {
+      arn = "arn:aws:s3:::aws-pam-test-ansible-123456789012"
+    }
+  }
   mock_resource "aws_secretsmanager_secret" {
     defaults = {
       arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:mock"
@@ -53,6 +58,7 @@ run "secure_topology" {
     authorization_expiration = "2099-01-01T00:00:00Z"
     expiration               = "2099-01-01"
     deployment_role_arn      = "arn:aws:iam::123456789012:role/aws-pam-test-github-deploy"
+    permissions_boundary_arn = "arn:aws:iam::123456789012:policy/aws-pam-test-workload-boundary"
   }
 
   assert {
@@ -68,5 +74,16 @@ run "secure_topology" {
   assert {
     condition     = module.openvpn.private_ip == "10.42.0.10" && module.jumpserver.private_ip == "10.42.10.10"
     error_message = "The narrow VPN route depends on stable private addresses."
+  }
+
+
+  assert {
+    condition     = alltrue([for role in values(module.ssm.instance_role_names) : startswith(role, "aws-pam-")])
+    error_message = "Every workload instance role must retain the aws-pam-* prefix."
+  }
+
+  assert {
+    condition     = alltrue([for boundary in values(module.ssm.instance_role_boundaries) : boundary == var.permissions_boundary_arn])
+    error_message = "Every workload instance role must use the bootstrap permissions boundary."
   }
 }

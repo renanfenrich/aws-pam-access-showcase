@@ -7,6 +7,7 @@ The separate `bootstrap/` root creates the encrypted/versioned S3 backend, nativ
 ```hcl
 aws_region                 = "us-east-1"
 name_suffix                = "unique01"
+deployment_id              = "demo01"
 github_owner               = "renanfenrich"
 github_repository          = "aws-pam-access-showcase"
 create_github_oidc_provider = true
@@ -21,6 +22,8 @@ aws-vault exec <profile> -- make bootstrap-apply TF_VARS='-var-file=terraform.tf
 ```
 
 Review the exact plan before apply. Never commit `bootstrap/terraform.tfvars` or bootstrap state. The main stack never owns its backend or initial OIDC trust.
+
+`deployment_id` must match the value used by the plan, deploy, and destroy workflows. Bootstrap uses it to scope the exact Ansible transfer bucket. The bootstrap also creates a workload permissions boundary and distinct managed policies for plan, deploy, and destroy; the destroy role has no create or privilege-expanding actions.
 
 ## GitHub environments
 

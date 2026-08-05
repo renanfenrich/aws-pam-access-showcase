@@ -26,7 +26,7 @@ The target and JumpServer have no public IP. The isolated subnet has no Internet
 | --- | --- |
 | VPC, three subnet classes, routes, NAT/IGW/EIPs, endpoints | OS hardening, packages, host firewalls |
 | Security groups, EC2, encrypted EBS, instance profiles | OpenVPN configuration and PKI installation |
-| OIDC roles, KMS keys, empty secret containers | JumpServer install, TLS, services, API policy |
+| OIDC roles, permissions boundary, KMS keys, empty secret containers | JumpServer install, TLS, services, API policy |
 | SSM transfer bucket, log groups, budget | Restricted target user, SSH key use, status file |
 
 Terraform has no provisioners and never generates secret values. Ansible reaches every instance with `amazon.aws.aws_ssm`; EC2 port 22 is never an administrative path.
@@ -61,7 +61,7 @@ docs/                              architecture, operations, proof, risk, and li
 
 ## Bootstrap
 
-Create `bootstrap/terraform.tfvars` with a unique `name_suffix` and the exact GitHub owner/repository. Then run:
+Create `bootstrap/terraform.tfvars` with a unique `name_suffix`, the workload `deployment_id`, and the exact GitHub owner/repository. Then run:
 
 ```bash
 aws-vault exec <profile> -- make bootstrap-init

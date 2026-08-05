@@ -32,6 +32,7 @@ jobs:
       TF_VAR_authorization_expiration: ${{ vars.AUTHORIZATION_EXPIRATION }}
       TF_VAR_expiration: ${{ vars.EXPIRATION }}
       TF_VAR_deployment_role_arn: ${{ vars.DEPLOY_ROLE_ARN }}
+      TF_VAR_permissions_boundary_arn: ${{ vars.PERMISSIONS_BOUNDARY_ARN }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
       TF_STATE_REGION: ${{ vars.AWS_REGION }}
       TF_STATE_KMS_KEY_ARN: ${{ vars.TF_STATE_KMS_KEY_ARN }}
@@ -46,7 +47,7 @@ jobs:
             "$PLAN_ROLE_ARN" "$TF_STATE_BUCKET" "$TF_STATE_REGION" "$TF_STATE_KMS_KEY_ARN" \
             "$TF_VAR_deployment_id" "$TF_VAR_operator_cidr" \
             "$TF_VAR_authorization_expiration" "$TF_VAR_expiration" \
-            "$TF_VAR_deployment_role_arn"; do
+            "$TF_VAR_deployment_role_arn" "$TF_VAR_permissions_boundary_arn"; do
             if [[ -z "$value" ]]; then configured=false; fi
           done
           printf 'configured=%s\n' "$configured" >> "$GITHUB_OUTPUT"

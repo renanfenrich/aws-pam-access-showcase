@@ -10,12 +10,15 @@
 | `PLAN_ROLE_ARN` | `showcase-plan` | plan role output |
 | `DEPLOY_ROLE_ARN` | plan/apply/destroy | deployment role output; also main-stack input |
 | `DESTROY_ROLE_ARN` | `showcase-destroy` | destroy role output |
+| `PERMISSIONS_BOUNDARY_ARN` | plan/apply/destroy | bootstrap `permissions_boundary_arn` output |
 | `DEPLOYMENT_ID` | plan/destroy | deterministic suffix, for example `demo01` |
 | `OPERATOR_CIDR` | plan/apply/destroy | explicit operator public CIDR, never `0.0.0.0/0` |
 | `AUTHORIZATION_EXPIRATION` | plan/destroy | future RFC3339 time; deploy receives a manual input |
 | `EXPIRATION` | plan/apply/destroy | `YYYY-MM-DD` cost-control tag |
 
 Do not configure AWS access-key secrets. The workflows request short-lived role credentials with GitHub OIDC.
+
+The deploy role can mutate only project-prefixed and project-tagged resources. Its `iam:PassRole` grant is limited to the three EC2 instance roles and EC2 as the destination service. The destroy role can inspect, revoke, and delete the tagged showcase but cannot create infrastructure or change role policies.
 
 ## First deployment
 

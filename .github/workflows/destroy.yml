@@ -49,6 +49,7 @@ jobs:
       TF_VAR_authorization_expiration: ${{ vars.AUTHORIZATION_EXPIRATION }}
       TF_VAR_expiration: ${{ vars.EXPIRATION }}
       TF_VAR_deployment_role_arn: ${{ vars.DEPLOY_ROLE_ARN }}
+      TF_VAR_permissions_boundary_arn: ${{ vars.PERMISSIONS_BOUNDARY_ARN }}
       AWS_REGION: ${{ inputs.aws_region }}
       REQUESTED_GIT_REF: ${{ inputs.git_ref }}
       REQUESTED_DEPLOYMENT_ID: ${{ inputs.deployment_id }}

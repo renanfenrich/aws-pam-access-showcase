@@ -1,48 +1,15 @@
 resource "aws_cloudwatch_log_group" "host" {
-  for_each = toset(["openvpn", "jumpserver", "sensitive-resource", "vpc-flow"])
+  for_each = toset(["openvpn", "jumpserver", "sensitive-resource"])
 
-  name              = "/aws-pam/${var.name}/${each.value}"
+  name              = "/aws/${var.name}/${each.value}"
   retention_in_days = 14
 }
 
-data "aws_iam_policy_document" "flow_trust" {
-  statement {
-    actions = ["sts:AssumeRole"]
-    principals {
-      type        = "Service"
-      identifiers = ["vpc-flow-logs.amazonaws.com"]
-    }
-  }
-}
-
-resource "aws_iam_role" "flow" {
-  name               = "${var.name}-vpc-flow-logs"
-  assume_role_policy = data.aws_iam_policy_document.flow_trust.json
-}
-
-data "aws_iam_policy_document" "flow" {
-  statement {
-    actions = [
-      "logs:CreateLogStream",
-      "logs:DescribeLogGroups",
-      "logs:DescribeLogStreams",
-      "logs:PutLogEvents",
-    ]
-    resources = ["${aws_cloudwatch_log_group.host["vpc-flow"].arn}:*"]
-  }
-}
-
-resource "aws_iam_role_policy" "flow" {
-  name   = "publish-vpc-flow-logs"
-  role   = aws_iam_role.flow.id
-  policy = data.aws_iam_policy_document.flow.json
-}
-
 resource "aws_flow_log" "this" {
-  iam_role_arn    = aws_iam_role.flow.arn
-  log_destination = aws_cloudwatch_log_group.host["vpc-flow"].arn
-  traffic_type    = "ALL"
-  vpc_id          = var.vpc_id
+  log_destination      = "${var.flow_log_bucket_arn}/vpc-flow-logs/"
+  log_destination_type = "s3"
+  traffic_type         = "ALL"
+  vpc_id               = var.vpc_id
 }
 
 data "aws_caller_identity" "current" {}

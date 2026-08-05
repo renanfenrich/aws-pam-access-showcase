@@ -72,6 +72,16 @@ variable "deployment_role_arn" {
   default     = ""
 }
 
+variable "permissions_boundary_arn" {
+  description = "Bootstrap-created permissions boundary required on every workload IAM role."
+  type        = string
+
+  validation {
+    condition     = can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:policy/aws-pam-.+", var.permissions_boundary_arn))
+    error_message = "permissions_boundary_arn must identify an aws-pam-* IAM policy."
+  }
+}
+
 variable "jumpserver_instance_type" {
   description = "At least 4 vCPU and 8 GiB; t3.xlarge provides 4 vCPU and 16 GiB."
   type        = string

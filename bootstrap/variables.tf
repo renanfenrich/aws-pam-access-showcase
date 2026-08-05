@@ -36,6 +36,17 @@ variable "name_suffix" {
   }
 }
 
+variable "deployment_id" {
+  description = "Deployment identifier used to scope workload names and the Ansible transfer bucket."
+  type        = string
+  default     = "demo"
+
+  validation {
+    condition     = can(regex("^[a-z0-9-]{3,16}$", var.deployment_id))
+    error_message = "deployment_id must contain 3-16 lowercase letters, numbers, or hyphens."
+  }
+}
+
 variable "owner" {
   description = "Owner tag for cost and operational attribution."
   type        = string

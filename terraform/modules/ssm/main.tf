@@ -13,8 +13,9 @@ data "aws_iam_policy_document" "ec2_trust" {
 resource "aws_iam_role" "instance" {
   for_each = toset(["openvpn", "jumpserver", "sensitive-resource"])
 
-  name               = "${var.name}-${each.value}"
-  assume_role_policy = data.aws_iam_policy_document.ec2_trust.json
+  name                 = "${var.name}-${each.value}"
+  assume_role_policy   = data.aws_iam_policy_document.ec2_trust.json
+  permissions_boundary = var.permissions_boundary_arn
 }
 
 resource "aws_iam_role_policy_attachment" "ssm_core" {
@@ -31,10 +32,48 @@ resource "aws_iam_instance_profile" "instance" {
   role = each.value.name
 }
 
+data "aws_iam_policy_document" "transfer_key" {
+  statement {
+    sid       = "AccountAdministration"
+    actions   = ["kms:*"]
+    resources = ["*"]
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+  }
+
+  statement {
+    sid = "FlowLogEncryption"
+    actions = [
+      "kms:DescribeKey",
+      "kms:Encrypt",
+      "kms:GenerateDataKey",
+      "kms:ReEncrypt*",
+    ]
+    resources = ["*"]
+    principals {
+      type        = "Service"
+      identifiers = ["delivery.logs.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values   = ["arn:aws:logs:*:${data.aws_caller_identity.current.account_id}:*"]
+    }
+  }
+}
+
 resource "aws_kms_key" "transfer" {
   description             = "Ansible SSM transfer object encryption"
   deletion_window_in_days = 7
   enable_key_rotation     = true
+  policy                  = data.aws_iam_policy_document.transfer_key.json
 }
 
 resource "aws_kms_alias" "transfer" {
@@ -43,7 +82,8 @@ resource "aws_kms_alias" "transfer" {
 }
 
 resource "aws_s3_bucket" "transfer" {
-  bucket = "${var.name}-ansible-${data.aws_caller_identity.current.account_id}"
+  bucket        = "${var.name}-ansible-${data.aws_caller_identity.current.account_id}"
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_public_access_block" "transfer" {
@@ -112,6 +152,56 @@ data "aws_iam_policy_document" "transfer_bucket" {
       test     = "ArnNotEquals"
       variable = "aws:PrincipalArn"
       values   = local.approved_principals
+    }
+    condition {
+      test     = "StringNotEquals"
+      variable = "aws:PrincipalServiceName"
+      values   = ["delivery.logs.amazonaws.com"]
+    }
+  }
+
+  statement {
+    sid       = "AllowFlowLogBucketAclCheck"
+    actions   = ["s3:GetBucketAcl"]
+    resources = [aws_s3_bucket.transfer.arn]
+    principals {
+      type        = "Service"
+      identifiers = ["delivery.logs.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values   = ["arn:aws:logs:*:${data.aws_caller_identity.current.account_id}:*"]
+    }
+  }
+
+  statement {
+    sid       = "AllowFlowLogDelivery"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.transfer.arn}/vpc-flow-logs/AWSLogs/${data.aws_caller_identity.current.account_id}/*"]
+    principals {
+      type        = "Service"
+      identifiers = ["delivery.logs.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values   = ["arn:aws:logs:*:${data.aws_caller_identity.current.account_id}:*"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "s3:x-amz-acl"
+      values   = ["bucket-owner-full-control"]
     }
   }
 }

@@ -54,6 +54,10 @@ resource "terraform_data" "deployment_gate" {
       condition     = can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+", var.deployment_role_arn))
       error_message = "deployment_role_arn must be the bootstrap-created GitHub deployment role ARN."
     }
+    precondition {
+      condition     = can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:policy/aws-pam-.+", var.permissions_boundary_arn))
+      error_message = "permissions_boundary_arn must be the bootstrap-created workload boundary ARN."
+    }
   }
 }
 
@@ -73,8 +77,9 @@ module "network" {
 module "ssm" {
   source = "../../modules/ssm"
 
-  name                = local.name
-  deployment_role_arn = var.deployment_role_arn
+  name                     = local.name
+  deployment_role_arn      = var.deployment_role_arn
+  permissions_boundary_arn = var.permissions_boundary_arn
 }
 
 resource "aws_iam_role_policy_attachment" "cloudwatch_agent" {
@@ -141,10 +146,11 @@ resource "aws_route" "vpn_return" {
 module "observability" {
   source = "../../modules/observability"
 
-  name               = local.name
-  vpc_id             = module.network.vpc_id
-  monthly_budget_usd = var.monthly_budget_usd
-  budget_email       = var.budget_email
+  name                = local.name
+  vpc_id              = module.network.vpc_id
+  monthly_budget_usd  = var.monthly_budget_usd
+  budget_email        = var.budget_email
+  flow_log_bucket_arn = module.ssm.transfer_bucket_arn
 }
 
 check "sensitive_resource_has_no_internet_route" {

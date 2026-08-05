@@ -13,6 +13,11 @@ output "github_role_arns" {
   value       = { for name, role in aws_iam_role.github : name => role.arn }
 }
 
+output "permissions_boundary_arn" {
+  description = "Boundary required on every IAM role created by the workload stack."
+  value       = aws_iam_policy.workload_boundary.arn
+}
+
 output "backend_config" {
   description = "Values used to initialize the main stack with native S3 lockfiles."
   value = {
@@ -24,4 +29,3 @@ output "backend_config" {
     use_lockfile = true
   }
 }
-
