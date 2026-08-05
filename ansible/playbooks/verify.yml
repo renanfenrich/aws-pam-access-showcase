@@ -1,0 +1,73 @@
+---
+- name: Verify managed-node baseline
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Confirm IMDSv2 can issue a token
+      ansible.builtin.uri:
+        url: http://169.254.169.254/latest/api/token
+        method: PUT
+        headers:
+          X-aws-ec2-metadata-token-ttl-seconds: "60"
+        return_content: false
+        status_code: 200
+
+- name: Verify sensitive resource controls
+  hosts: sensitive_resource
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Read the demonstration status as the restricted account
+      ansible.builtin.command: cat /opt/private-resource/status.txt
+      become: true
+      become_user: jms-operator
+      register: restricted_status
+      changed_when: false
+
+    - name: Confirm the intended resource was reached
+      ansible.builtin.assert:
+        that:
+          - "'AWS PAM access showcase' in restricted_status.stdout"
+
+    - name: Confirm shadow is not readable by the restricted account
+      ansible.builtin.command: cat /etc/shadow
+      become: true
+      become_user: jms-operator
+      register: shadow_read
+      changed_when: false
+      failed_when: shadow_read.rc == 0
+
+- name: Verify JumpServer health and reconciled policy
+  hosts: jumpserver
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Confirm JumpServer health through its private TLS endpoint
+      ansible.builtin.uri:
+        url: "https://{{ jumpserver_private_ip }}/api/v1/health/"
+        ca_path: /etc/jumpserver/tls/ca.crt
+        status_code: 200
+        return_content: false
+
+    - name: Verify the pinned JumpServer API policy
+      ansible.builtin.command:
+        argv:
+          - /opt/aws-pam-api/bin/python
+          - /opt/aws-pam-api/jumpserver_reconcile.py
+          - --verify-only
+          - --base-url
+          - "https://{{ jumpserver_private_ip }}"
+          - --ca-file
+          - /etc/jumpserver/tls/ca.crt
+          - --region
+          - "{{ aws_region }}"
+          - --secret-names
+          - "{{ secret_names | to_json }}"
+          - --asset-address
+          - "{{ sensitive_private_ip }}"
+          - --expiration
+          - "{{ authorization_expiration }}"
+      register: jumpserver_policy
+      changed_when: false
+      no_log: true

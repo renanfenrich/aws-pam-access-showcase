@@ -1,0 +1,18 @@
+#!/usr/sbin/nft -f
+flush ruleset
+table inet filter {
+  chain input {
+    type filter hook input priority 0; policy drop;
+    iifname "lo" accept
+    ct state established,related accept
+    ip saddr {{ vpn_client_cidr }} tcp dport { 443, 2222 } accept
+  }
+  chain forward {
+    type filter hook forward priority 0; policy drop;
+    ct state established,related accept
+    iifname "docker0" accept
+    ip saddr { {{ vpn_client_cidr }}, {{ jumpserver_private_ip }}/32 } ip daddr 192.168.250.0/24 tcp dport { 443, 2222 } accept
+  }
+  chain output { type filter hook output priority 0; policy accept; }
+}
+

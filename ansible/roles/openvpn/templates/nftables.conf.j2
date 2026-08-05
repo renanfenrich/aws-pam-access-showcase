@@ -1,0 +1,19 @@
+#!/usr/sbin/nft -f
+flush ruleset
+table inet filter {
+  chain input {
+    type filter hook input priority 0; policy drop;
+    iifname "lo" accept
+    ct state established,related accept
+    udp dport 1194 accept
+  }
+  chain forward {
+    type filter hook forward priority 0; policy drop;
+    ct state established,related accept
+    iifname "tun0" ip daddr 10.42.20.0/24 reject
+    iifname "tun0" ip daddr {{ jumpserver_private_ip }}/32 tcp dport { 443, 2222 } accept
+    iifname "tun0" reject
+  }
+  chain output { type filter hook output priority 0; policy accept; }
+}
+

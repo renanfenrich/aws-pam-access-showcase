@@ -1,0 +1,292 @@
+---
+- name: Install JumpServer host dependencies
+  ansible.builtin.dnf:
+    name:
+      - iptables-nft
+      - nftables
+      - python3-pip
+      - python3.11
+      - tar
+    state: present
+
+- name: Locate the encrypted JumpServer data device
+  ansible.builtin.stat:
+    path: "/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_{{ jumpserver_data_volume_id | replace('-', '') }}"
+  register: jumpserver_nvme_device
+
+- name: Select the encrypted JumpServer data device
+  ansible.builtin.set_fact:
+    jumpserver_data_device: >-
+      {{ jumpserver_nvme_device.stat.path if jumpserver_nvme_device.stat.exists else '/dev/xvdf' }}
+
+- name: Create a filesystem on the encrypted data volume
+  community.general.filesystem:
+    fstype: xfs
+    dev: "{{ jumpserver_data_device }}"
+
+- name: Mount the persistent encrypted data volume
+  ansible.posix.mount:
+    path: /data
+    src: "{{ jumpserver_data_device }}"
+    fstype: xfs
+    opts: defaults,nofail,nodev,nosuid
+    state: mounted
+
+- name: Create persistent JumpServer data directory
+  ansible.builtin.file:
+    path: /data/jumpserver
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Download pinned Docker static archive
+  ansible.builtin.get_url:
+    url: "https://download.docker.com/linux/static/stable/x86_64/docker-{{ jumpserver_docker_version }}.tgz"
+    dest: "/var/cache/docker-{{ jumpserver_docker_version }}.tgz"
+    checksum: "sha256:{{ jumpserver_docker_sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install pinned Docker binaries
+  ansible.builtin.unarchive:
+    src: "/var/cache/docker-{{ jumpserver_docker_version }}.tgz"
+    dest: /usr/local/bin
+    remote_src: true
+    extra_opts:
+      - --strip-components=1
+    creates: /usr/local/bin/dockerd
+  notify: Restart Docker
+
+- name: Create Docker Compose plugin directory
+  ansible.builtin.file:
+    path: /usr/local/lib/docker/cli-plugins
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download pinned Docker Compose plugin
+  ansible.builtin.get_url:
+    url: "https://github.com/docker/compose/releases/download/{{ jumpserver_docker_compose_version }}/docker-compose-linux-x86_64"
+    dest: /usr/local/lib/docker/cli-plugins/docker-compose
+    checksum: "sha256:{{ jumpserver_docker_compose_sha256 }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install Docker systemd unit
+  ansible.builtin.template:
+    src: docker.service.j2
+    dest: /etc/systemd/system/docker.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Docker
+
+- name: Enable Docker
+  ansible.builtin.systemd_service:
+    name: docker
+    daemon_reload: true
+    enabled: true
+    state: started
+
+- name: Download pinned JumpServer installer artifact
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/jumpserver/installer/releases/download/{{ jumpserver_version }}/
+      jumpserver-installer-{{ jumpserver_version }}.tar.gz
+    dest: "/var/cache/jumpserver-installer-{{ jumpserver_version }}.tar.gz"
+    checksum: "sha256:{{ jumpserver_installer_sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Extract the verified JumpServer installer
+  ansible.builtin.unarchive:
+    src: "/var/cache/jumpserver-installer-{{ jumpserver_version }}.tar.gz"
+    dest: /opt
+    remote_src: true
+    creates: "/opt/jumpserver-installer-{{ jumpserver_version }}/jmsctl.sh"
+
+- name: Read JumpServer runtime secrets
+  ansible.builtin.set_fact:
+    jumpserver_secret_key: >-
+      {{ lookup('amazon.aws.aws_secret', secret_names['jumpserver-secret-key'], region=aws_region) }}
+    jumpserver_bootstrap_token: >-
+      {{ lookup('amazon.aws.aws_secret', secret_names['jumpserver-bootstrap-token'], region=aws_region) }}
+    jumpserver_admin_password: >-
+      {{ lookup('amazon.aws.aws_secret', secret_names['jumpserver-admin-password'], region=aws_region) }}
+    jumpserver_postgres_password: >-
+      {{ lookup('amazon.aws.aws_secret', secret_names['jumpserver-postgres-password'], region=aws_region) }}
+    jumpserver_redis_password: >-
+      {{ lookup('amazon.aws.aws_secret', secret_names['jumpserver-redis-password'], region=aws_region) }}
+    jumpserver_tls_ca: >-
+      {{ lookup('amazon.aws.aws_secret', secret_names['jumpserver-tls-ca'], region=aws_region) | from_json }}
+  no_log: true
+
+- name: Create private TLS material directory
+  ansible.builtin.file:
+    path: /etc/jumpserver/tls
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Restore the private TLS CA
+  ansible.builtin.copy:
+    dest: "/etc/jumpserver/tls/{{ item.name }}"
+    content: "{{ item.content }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - { name: ca.key, content: "{{ jumpserver_tls_ca.private_key }}", mode: "0600" }
+    - { name: ca.crt, content: "{{ jumpserver_tls_ca.certificate }}", mode: "0644" }
+  no_log: true
+
+- name: Generate the private endpoint TLS key
+  community.crypto.openssl_privatekey:
+    path: /etc/jumpserver/tls/server.key
+    size: 3072
+    type: RSA
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Generate the private endpoint certificate request
+  community.crypto.openssl_csr:
+    path: /etc/jumpserver/tls/server.csr
+    privatekey_path: /etc/jumpserver/tls/server.key
+    common_name: "{{ jumpserver_private_ip }}"
+    subject_alt_name:
+      - "IP:{{ jumpserver_private_ip }}"
+    key_usage:
+      - digitalSignature
+      - keyEncipherment
+    extended_key_usage:
+      - serverAuth
+
+- name: Sign the private endpoint certificate
+  community.crypto.x509_certificate:
+    path: /etc/jumpserver/tls/server.crt
+    csr_path: /etc/jumpserver/tls/server.csr
+    ownca_path: /etc/jumpserver/tls/ca.crt
+    ownca_privatekey_path: /etc/jumpserver/tls/ca.key
+    provider: ownca
+    ownca_not_after: +30d
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install TLS material into the verified installer
+  ansible.builtin.copy:
+    src: "/etc/jumpserver/tls/{{ item.source }}"
+    dest: "/opt/jumpserver-installer-{{ jumpserver_version }}/config_init/nginx/cert/{{ item.destination }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - { source: server.crt, destination: server.crt, mode: "0644" }
+    - { source: server.key, destination: server.key, mode: "0600" }
+  notify: Restart JumpServer
+
+- name: Render secret JumpServer configuration
+  ansible.builtin.template:
+    src: config.txt.j2
+    dest: "/opt/jumpserver-installer-{{ jumpserver_version }}/config.txt"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart JumpServer
+
+- name: Pin JumpServer and dependency images by immutable digest
+  ansible.builtin.replace:
+    path: "/opt/jumpserver-installer-{{ jumpserver_version }}/{{ item.path }}"
+    regexp: "^\\s*image:.*$"
+    replace: "    image: {{ item.image }}"
+  loop:
+    - { path: compose/core.yml, image: "{{ jumpserver_images.core }}" }
+    - { path: compose/celery.yml, image: "{{ jumpserver_images.core }}" }
+    - { path: compose/init-db.yml, image: "{{ jumpserver_images.core }}" }
+    - { path: compose/receptor.yml, image: "{{ jumpserver_images.core }}" }
+    - { path: compose/koko.yml, image: "{{ jumpserver_images.koko }}" }
+    - { path: compose/web.yml, image: "{{ jumpserver_images.web }}" }
+    - { path: compose/postgresql.yml, image: "{{ jumpserver_images.postgresql }}" }
+    - { path: compose/redis.yml, image: "{{ jumpserver_images.redis }}" }
+  notify: Restart JumpServer
+
+- name: Install JumpServer standalone deployment
+  ansible.builtin.command: ./jmsctl.sh install
+  args:
+    chdir: "/opt/jumpserver-installer-{{ jumpserver_version }}"
+    creates: "/data/jumpserver/.installed-{{ jumpserver_version }}"
+  environment:
+    UNCHECK_DEPENDENCIES: "1"
+  register: jumpserver_install
+  no_log: true
+
+- name: Record successful pinned installation
+  ansible.builtin.copy:
+    dest: "/data/jumpserver/.installed-{{ jumpserver_version }}"
+    content: "{{ jumpserver_version }}\n"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Start the pinned JumpServer services
+  ansible.builtin.command: ./jmsctl.sh start
+  args:
+    chdir: "/opt/jumpserver-installer-{{ jumpserver_version }}"
+  changed_when: false
+  no_log: true
+
+- name: Set the recovered administrator password without exposing it
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - -e
+      - JMS_ADMIN_PASSWORD
+      - jms_core
+      - python
+      - /opt/jumpserver/apps/manage.py
+      - shell
+      - -c
+      - >-
+        import os; from users.models import User;
+        u=User.objects.get(username='admin');
+        u.set_password(os.environ['JMS_ADMIN_PASSWORD']); u.save(update_fields=['password'])
+  environment:
+    JMS_ADMIN_PASSWORD: "{{ jumpserver_admin_password }}"
+  changed_when: false
+  no_log: true
+
+- name: Install JumpServer host forwarding firewall
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/sysconfig/nftables.conf
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Reload JumpServer firewall
+
+- name: Enable the JumpServer host firewall
+  ansible.builtin.systemd_service:
+    name: nftables
+    enabled: true
+    state: started
+
+- name: Wait for the private JumpServer health endpoint
+  ansible.builtin.uri:
+    url: "https://{{ jumpserver_private_ip }}/api/v1/health/"
+    ca_path: /etc/jumpserver/tls/ca.crt
+    status_code: 200
+    return_content: false
+  register: jumpserver_health
+  retries: 30
+  delay: 10
+  until: jumpserver_health.status == 200

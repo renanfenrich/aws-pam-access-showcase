@@ -1,0 +1,63 @@
+---
+- name: Create isolated API reconciliation virtual environment
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -m
+      - venv
+      - /opt/aws-pam-api
+    creates: /opt/aws-pam-api/bin/python
+
+- name: Install pinned API client dependencies
+  ansible.builtin.pip:
+    name:
+      - boto3==1.43.64
+      - botocore==1.43.64
+      - requests==2.34.2
+    virtualenv: /opt/aws-pam-api
+
+- name: Install schema-pinned JumpServer reconciliation client
+  ansible.builtin.copy:
+    src: jumpserver_reconcile.py
+    dest: /opt/aws-pam-api/jumpserver_reconcile.py
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Reconcile one user, asset, account, authorization, and command filter
+  ansible.builtin.command:
+    argv:
+      - /opt/aws-pam-api/bin/python
+      - /opt/aws-pam-api/jumpserver_reconcile.py
+      - --base-url
+      - "https://{{ jumpserver_private_ip }}"
+      - --ca-file
+      - /etc/jumpserver/tls/ca.crt
+      - --region
+      - "{{ aws_region }}"
+      - --secret-names
+      - "{{ secret_names | to_json }}"
+      - --asset-address
+      - "{{ sensitive_private_ip }}"
+      - --expiration
+      - "{{ authorization_expiration }}"
+  register: jumpserver_bootstrap_reconcile
+  changed_when: "(jumpserver_bootstrap_reconcile.stdout | from_json).changed"
+  no_log: true
+
+- name: Create sanitized local evidence directory
+  ansible.builtin.file:
+    path: /var/lib/aws-pam
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Store sanitized policy evidence on the managed node
+  ansible.builtin.copy:
+    dest: /var/lib/aws-pam/jumpserver-policy.json
+    content: "{{ jumpserver_bootstrap_reconcile.stdout }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+  no_log: true

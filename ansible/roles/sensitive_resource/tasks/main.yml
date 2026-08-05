@@ -1,0 +1,68 @@
+---
+- name: Read the dedicated SSH credential
+  ansible.builtin.set_fact:
+    sensitive_resource_ssh_key: >-
+      {{ lookup('amazon.aws.aws_secret', secret_names['sensitive-resource-ssh-key'],
+                region=aws_region) | from_json }}
+  no_log: true
+
+- name: Create the restricted operator account
+  ansible.builtin.user:
+    name: jms-operator
+    comment: JumpServer managed account
+    create_home: true
+    password_lock: true
+    shell: /bin/bash
+    state: present
+
+- name: Install only the automation-managed SSH public key
+  ansible.posix.authorized_key:
+    user: jms-operator
+    key: "{{ sensitive_resource_ssh_key.public_key }}"
+    exclusive: true
+    manage_dir: true
+  no_log: true
+
+- name: Create demonstration resource directory
+  ansible.builtin.file:
+    path: /opt/private-resource
+    state: directory
+    owner: root
+    group: jms-operator
+    mode: "0750"
+
+- name: Publish non-sensitive reachability proof
+  ansible.builtin.copy:
+    dest: /opt/private-resource/status.txt
+    owner: root
+    group: jms-operator
+    mode: "0440"
+    content: |
+      AWS PAM access showcase
+      Resource: sensitive-resource
+      Access path: OpenVPN -> JumpServer authorization -> SSH proxy
+
+- name: Ensure the account has no sudo policy
+  ansible.builtin.file:
+    path: /etc/sudoers.d/jms-operator
+    state: absent
+
+- name: Install host firewall tooling
+  ansible.builtin.dnf:
+    name: nftables
+    state: present
+
+- name: Restrict host ingress to JumpServer SSH
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/sysconfig/nftables.conf
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Reload sensitive firewall
+
+- name: Enable the sensitive-resource firewall
+  ansible.builtin.systemd_service:
+    name: nftables
+    enabled: true
+    state: started
