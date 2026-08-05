@@ -94,9 +94,7 @@
 
 - name: Download pinned JumpServer installer artifact
   ansible.builtin.get_url:
-    url: >-
-      https://github.com/jumpserver/installer/releases/download/{{ jumpserver_version }}/
-      jumpserver-installer-{{ jumpserver_version }}.tar.gz
+    url: "https://github.com/jumpserver/installer/releases/download/{{ jumpserver_version }}/jumpserver-installer-{{ jumpserver_version }}.tar.gz"
     dest: "/var/cache/jumpserver-installer-{{ jumpserver_version }}.tar.gz"
     checksum: "sha256:{{ jumpserver_installer_sha256 }}"
     owner: root

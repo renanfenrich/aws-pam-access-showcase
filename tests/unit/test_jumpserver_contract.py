@@ -23,6 +23,15 @@ def test_api_contract_is_pinned_to_inspected_release() -> None:
     assert client.ORG_USER_ROLE_ID.endswith("0007")
 
 
+def test_installer_url_is_not_folded_with_whitespace() -> None:
+    tasks = Path("ansible/roles/jumpserver/tasks/main.yml").read_text(encoding="utf-8")
+    expected = (
+        "releases/download/{{ jumpserver_version }}/"
+        "jumpserver-installer-{{ jumpserver_version }}.tar.gz"
+    )
+    assert expected in tasks
+
+
 def test_command_filter_fields_are_narrow() -> None:
     source = Path("ansible/roles/jumpserver_bootstrap/files/jumpserver_reconcile.py").read_text(
         encoding="utf-8"
