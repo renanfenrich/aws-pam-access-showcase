@@ -35,24 +35,54 @@ jobs:
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
       TF_STATE_REGION: ${{ vars.AWS_REGION }}
       TF_STATE_KMS_KEY_ARN: ${{ vars.TF_STATE_KMS_KEY_ARN }}
+      PLAN_ROLE_ARN: ${{ vars.PLAN_ROLE_ARN }}
     steps:
+      - name: Check bootstrap configuration
+        id: bootstrap-configuration
+        shell: bash
+        run: |
+          configured=true
+          for value in \
+            "$PLAN_ROLE_ARN" "$TF_STATE_BUCKET" "$TF_STATE_REGION" "$TF_STATE_KMS_KEY_ARN" \
+            "$TF_VAR_deployment_id" "$TF_VAR_operator_cidr" \
+            "$TF_VAR_authorization_expiration" "$TF_VAR_expiration" \
+            "$TF_VAR_deployment_role_arn"; do
+            if [[ -z "$value" ]]; then configured=false; fi
+          done
+          printf 'configured=%s\n' "$configured" >> "$GITHUB_OUTPUT"
+          if [[ "$configured" != true ]]; then
+            printf '%s\n' \
+              '## Terraform plan not configured' \
+              '' \
+              'Bootstrap the repository and configure the showcase-plan environment variables documented in docs/deployment.md.' \
+              >> "$GITHUB_STEP_SUMMARY"
+            if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+              echo "Manual plan requires completed bootstrap configuration." >&2
+              exit 2
+            fi
+          fi
+
       - name: Check out repository
+        if: steps.bootstrap-configuration.outputs.configured == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Python
+        if: steps.bootstrap-configuration.outputs.configured == 'true'
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
 
       - name: Set up Terraform
+        if: steps.bootstrap-configuration.outputs.configured == 'true'
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: 1.15.8
           terraform_wrapper: false
 
       - name: Authenticate with the plan-only AWS role
+        if: steps.bootstrap-configuration.outputs.configured == 'true'
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
           role-to-assume: ${{ vars.PLAN_ROLE_ARN }}
@@ -60,6 +90,7 @@ jobs:
           role-session-name: github-showcase-plan
 
       - name: Initialize remote state with native S3 locking
+        if: steps.bootstrap-configuration.outputs.configured == 'true'
         run: |
           terraform -chdir=terraform/environments/showcase init -reconfigure \
             -backend-config="bucket=$TF_STATE_BUCKET" \
@@ -70,6 +101,7 @@ jobs:
             -backend-config="use_lockfile=true"
 
       - name: Create a fresh plan without printing values
+        if: steps.bootstrap-configuration.outputs.configured == 'true'
         id: terraform-plan
         shell: bash
         run: |
@@ -84,6 +116,7 @@ jobs:
           printf 'exit_code=%s\n' "$exit_code" >> "$GITHUB_OUTPUT"
 
       - name: Publish sanitized summary and block destructive changes
+        if: steps.bootstrap-configuration.outputs.configured == 'true'
         shell: bash
         run: |
           terraform -chdir=terraform/environments/showcase show -json "$RUNNER_TEMP/showcase.tfplan" > "$RUNNER_TEMP/plan.json"
@@ -93,7 +126,7 @@ jobs:
           exit "$summary_status"
 
       - name: Remove local plan data
-        if: always()
+        if: always() && steps.bootstrap-configuration.outputs.configured == 'true'
         shell: bash
         run: |
           shred -u "$RUNNER_TEMP/showcase.tfplan" "$RUNNER_TEMP/plan.json" 2>/dev/null || true
