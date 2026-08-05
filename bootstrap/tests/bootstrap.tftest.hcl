@@ -41,6 +41,11 @@ run "environment_scoped_roles" {
     condition     = local.oidc_subject_prefix == "repo:renanfenrich@1413054/aws-pam-access-showcase@1324241869"
     error_message = "The configured stable-ID repository subject prefix must be used exactly."
   }
+
+  assert {
+    condition     = contains(data.aws_iam_policy_document.plan_state_access.statement[3].actions, "kms:GenerateDataKey")
+    error_message = "The plan role must be able to encrypt its native S3 lockfile."
+  }
 }
 
 run "least_privilege_policy_regressions" {

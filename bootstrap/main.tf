@@ -204,8 +204,8 @@ data "aws_iam_policy_document" "plan_state_access" {
   }
 
   statement {
-    sid       = "DecryptState"
-    actions   = ["kms:Decrypt", "kms:DescribeKey"]
+    sid       = "UseStateKey"
+    actions   = ["kms:Decrypt", "kms:DescribeKey", "kms:GenerateDataKey"]
     resources = [aws_kms_key.state.arn]
   }
 }
