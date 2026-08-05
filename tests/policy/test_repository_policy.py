@@ -70,6 +70,11 @@ def test_ec2_controls_are_explicit() -> None:
     assert modules.count("encrypted   = true") >= 3
 
 
+def test_openvpn_eip_does_not_force_instance_replacement() -> None:
+    openvpn = (ROOT / "terraform/modules/openvpn/main.tf").read_text(encoding="utf-8")
+    assert "ignore_changes = [associate_public_ip_address]" in openvpn
+
+
 def test_deployment_interlock_defaults_off() -> None:
     variables = (ROOT / "terraform/environments/showcase/variables.tf").read_text(encoding="utf-8")
     match = re.search(r'variable "deployment_enabled"\s*\{(?P<body>.*?)\n\}', variables, re.DOTALL)

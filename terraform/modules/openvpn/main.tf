@@ -26,6 +26,9 @@ resource "aws_instance" "this" {
   }
 
   lifecycle {
+    # The separately managed EIP makes EC2 report this flag as true after association.
+    ignore_changes = [associate_public_ip_address]
+
     precondition {
       condition     = var.private_ip != ""
       error_message = "OpenVPN requires a stable private IP for the return route."
@@ -38,4 +41,3 @@ resource "aws_eip" "this" {
   instance = aws_instance.this.id
   tags     = { Name = "${var.name}-openvpn" }
 }
-

@@ -190,4 +190,30 @@ run "least_privilege_policy_regressions" {
     ])
     error_message = "AWS Budgets create and delete operations must use budgets:ModifyBudget."
   }
+
+  assert {
+    condition = alltrue([
+      for action in ["kms:CreateGrant", "kms:GenerateDataKeyWithoutPlaintext", "kms:ReEncryptFrom", "kms:ReEncryptTo"] :
+      strcontains(local.deploy_policy_documents.storage, action)
+    ])
+    error_message = "The deployment role must include the documented customer-managed EBS key permissions."
+  }
+
+  assert {
+    condition     = strcontains(local.deploy_policy_documents.storage, "kms:GrantIsForAWSResource")
+    error_message = "KMS grants must be limited to AWS-service resource grants."
+  }
+
+  assert {
+    condition     = strcontains(join("", values(local.deploy_policy_documents)), "budgets:TagResource")
+    error_message = "Provider create/read follow-up actions must remain authorized on exact showcase resources."
+  }
+
+  assert {
+    condition = alltrue([
+      for policy in [local.plan_policy, local.deploy_policy_documents.storage, local.destroy_policy_documents.storage] :
+      strcontains(policy, "s3:GetBucketWebsite") && strcontains(policy, "s3:GetAccelerateConfiguration")
+    ])
+    error_message = "Every Terraform role must be able to refresh the exact transfer bucket."
+  }
 }
