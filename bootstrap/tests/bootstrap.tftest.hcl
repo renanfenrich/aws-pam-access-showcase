@@ -23,7 +23,8 @@ run "environment_scoped_roles" {
   command = plan
 
   variables {
-    name_suffix = "test1234"
+    name_suffix                = "test1234"
+    github_oidc_subject_prefix = "repo:renanfenrich@1413054/aws-pam-access-showcase@1324241869"
   }
 
   assert {
@@ -34,6 +35,11 @@ run "environment_scoped_roles" {
   assert {
     condition     = aws_s3_bucket_versioning.state.versioning_configuration[0].status == "Enabled"
     error_message = "Terraform state versioning must remain enabled."
+  }
+
+  assert {
+    condition     = local.oidc_subject_prefix == "repo:renanfenrich@1413054/aws-pam-access-showcase@1324241869"
+    error_message = "The configured stable-ID repository subject prefix must be used exactly."
   }
 }
 

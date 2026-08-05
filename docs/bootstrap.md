@@ -10,10 +10,19 @@ name_suffix                = "unique01"
 deployment_id              = "demo01"
 github_owner               = "renanfenrich"
 github_repository          = "aws-pam-access-showcase"
+github_oidc_subject_prefix = "repo:renanfenrich@1413054/aws-pam-access-showcase@1324241869"
 create_github_oidc_provider = true
 ```
 
 If the account already has `token.actions.githubusercontent.com`, set `create_github_oidc_provider = false`; the stack reads the existing provider instead of attempting a duplicate.
+
+Set `github_oidc_subject_prefix` to the exact `sub_claim_prefix` returned by:
+
+```bash
+gh api repos/<owner>/<repository>/actions/oidc/customization/sub
+```
+
+Leave it empty only when GitHub emits the legacy `repo:<owner>/<repository>` subject. Stable owner and repository IDs remain valid across renames and transfers.
 
 ```bash
 aws-vault exec <profile> -- make bootstrap-init

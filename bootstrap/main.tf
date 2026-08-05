@@ -9,7 +9,8 @@ locals {
     managed-by  = "terraform"
     expiration  = "none-bootstrap"
   }
-  repository = "${var.github_owner}/${var.github_repository}"
+  repository          = "${var.github_owner}/${var.github_repository}"
+  oidc_subject_prefix = var.github_oidc_subject_prefix == "" ? "repo:${local.repository}" : var.github_oidc_subject_prefix
   environments = {
     plan    = "showcase-plan"
     deploy  = "showcase-apply"
@@ -128,7 +129,7 @@ data "aws_iam_policy_document" "github_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${local.repository}:environment:${each.value}"]
+      values   = ["${local.oidc_subject_prefix}:environment:${each.value}"]
     }
   }
 }
@@ -998,5 +999,12 @@ check "oidc_subjects_are_environment_scoped" {
   assert {
     condition     = alltrue([for environment in values(local.environments) : startswith(environment, "showcase-")])
     error_message = "All OIDC subjects must use a dedicated showcase environment."
+  }
+}
+
+check "oidc_subject_prefix_is_repository_scoped" {
+  assert {
+    condition     = startswith(local.oidc_subject_prefix, "repo:") && !strcontains(local.oidc_subject_prefix, ":environment:")
+    error_message = "github_oidc_subject_prefix must identify one repository without embedding an environment."
   }
 }
