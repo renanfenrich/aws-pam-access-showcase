@@ -354,7 +354,7 @@ locals {
       "iam:List*",
       "kms:ListAliases",
       "logs:DescribeLogGroups",
-      "resourcegroupstaggingapi:GetResources",
+      "tag:GetResources",
       "secretsmanager:ListSecrets",
       "sns:ListTopics",
       "ssm:DescribeInstanceInformation",
@@ -790,7 +790,7 @@ locals {
         {
           Sid      = "ManageExactBudget"
           Effect   = "Allow"
-          Action   = ["budgets:CreateBudget", "budgets:DeleteBudget", "budgets:ModifyBudget", "budgets:ViewBudget"]
+          Action   = ["budgets:ModifyBudget", "budgets:ViewBudget"]
           Resource = local.project_budget_arn
         },
         {
@@ -952,7 +952,7 @@ locals {
         {
           Sid      = "DeleteExactBudget"
           Effect   = "Allow"
-          Action   = ["budgets:DeleteBudget"]
+          Action   = ["budgets:ModifyBudget"]
           Resource = local.project_budget_arn
         },
       ]
