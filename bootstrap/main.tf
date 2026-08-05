@@ -394,6 +394,7 @@ locals {
       Sid    = "ReadExactTransferBucket"
       Effect = "Allow"
       Action = [
+        "s3:GetAccelerateConfiguration",
         "s3:GetBucketAcl",
         "s3:GetBucketCors",
         "s3:GetBucketLocation",
@@ -404,6 +405,7 @@ locals {
         "s3:GetBucketRequestPayment",
         "s3:GetBucketTagging",
         "s3:GetBucketVersioning",
+        "s3:GetBucketWebsite",
         "s3:GetEncryptionConfiguration",
         "s3:GetLifecycleConfiguration",
         "s3:GetReplicationConfiguration",
@@ -689,14 +691,21 @@ locals {
             "s3:CreateBucket",
             "s3:DeleteBucket",
             "s3:DeleteBucketPolicy",
+            "s3:GetAccelerateConfiguration",
             "s3:GetBucketAcl",
+            "s3:GetBucketCors",
             "s3:GetBucketLocation",
+            "s3:GetBucketLogging",
+            "s3:GetBucketObjectLockConfiguration",
             "s3:GetBucketPolicy",
             "s3:GetBucketPublicAccessBlock",
+            "s3:GetBucketRequestPayment",
             "s3:GetBucketTagging",
             "s3:GetBucketVersioning",
+            "s3:GetBucketWebsite",
             "s3:GetEncryptionConfiguration",
             "s3:GetLifecycleConfiguration",
+            "s3:GetReplicationConfiguration",
             "s3:ListBucket",
             "s3:ListBucketVersions",
             "s3:PutBucketPolicy",
@@ -723,9 +732,18 @@ locals {
         {
           Sid       = "ManageTaggedProjectKeys"
           Effect    = "Allow"
-          Action    = ["kms:CancelKeyDeletion", "kms:CreateGrant", "kms:Decrypt", "kms:DescribeKey", "kms:DisableKey", "kms:EnableKey", "kms:EnableKeyRotation", "kms:Encrypt", "kms:GenerateDataKey", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus", "kms:ListGrants", "kms:ListResourceTags", "kms:PutKeyPolicy", "kms:RetireGrant", "kms:RevokeGrant", "kms:ScheduleKeyDeletion", "kms:TagResource", "kms:UntagResource"]
+          Action    = ["kms:CancelKeyDeletion", "kms:Decrypt", "kms:DescribeKey", "kms:DisableKey", "kms:EnableKey", "kms:EnableKeyRotation", "kms:Encrypt", "kms:GenerateDataKey", "kms:GenerateDataKeyWithoutPlaintext", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus", "kms:ListGrants", "kms:ListResourceTags", "kms:PutKeyPolicy", "kms:ReEncryptFrom", "kms:ReEncryptTo", "kms:RetireGrant", "kms:RevokeGrant", "kms:ScheduleKeyDeletion", "kms:TagResource", "kms:UntagResource"]
           Resource  = local.project_key_arn
           Condition = local.resource_tag_condition
+        },
+        {
+          Sid      = "GrantTaggedProjectKeysToAwsServices"
+          Effect   = "Allow"
+          Action   = ["kms:CreateGrant"]
+          Resource = local.project_key_arn
+          Condition = merge(local.resource_tag_condition, {
+            Bool = { "kms:GrantIsForAWSResource" = "true" }
+          })
         },
         {
           Sid      = "ManageProjectAliasNames"
@@ -791,7 +809,7 @@ locals {
         {
           Sid      = "ManageExactBudget"
           Effect   = "Allow"
-          Action   = ["budgets:ModifyBudget", "budgets:ViewBudget"]
+          Action   = ["budgets:ListTagsForResource", "budgets:ModifyBudget", "budgets:TagResource", "budgets:UntagResource", "budgets:ViewBudget"]
           Resource = local.project_budget_arn
         },
         {
@@ -877,7 +895,7 @@ locals {
         {
           Sid      = "DeleteExactTransferBucket"
           Effect   = "Allow"
-          Action   = ["s3:DeleteBucket", "s3:DeleteBucketPolicy", "s3:GetBucketLocation", "s3:GetBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:GetBucketTagging", "s3:GetEncryptionConfiguration", "s3:GetLifecycleConfiguration", "s3:ListBucket", "s3:ListBucketVersions"]
+          Action   = ["s3:DeleteBucket", "s3:DeleteBucketPolicy", "s3:GetAccelerateConfiguration", "s3:GetBucketAcl", "s3:GetBucketCors", "s3:GetBucketLocation", "s3:GetBucketLogging", "s3:GetBucketObjectLockConfiguration", "s3:GetBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:GetBucketRequestPayment", "s3:GetBucketTagging", "s3:GetBucketVersioning", "s3:GetBucketWebsite", "s3:GetEncryptionConfiguration", "s3:GetLifecycleConfiguration", "s3:GetReplicationConfiguration", "s3:ListBucket", "s3:ListBucketVersions"]
           Resource = local.transfer_bucket_arn
         },
         {
@@ -932,28 +950,28 @@ locals {
         {
           Sid       = "DeleteTaggedSecrets"
           Effect    = "Allow"
-          Action    = ["secretsmanager:DeleteResourcePolicy", "secretsmanager:DeleteSecret"]
+          Action    = ["secretsmanager:DeleteResourcePolicy", "secretsmanager:DeleteSecret", "secretsmanager:DescribeSecret", "secretsmanager:GetResourcePolicy", "secretsmanager:ListSecretVersionIds"]
           Resource  = local.project_secret_arn
           Condition = local.resource_tag_condition
         },
         {
           Sid       = "DeleteTaggedLogGroups"
           Effect    = "Allow"
-          Action    = ["logs:DeleteLogGroup"]
+          Action    = ["logs:DeleteLogGroup", "logs:ListTagsForResource"]
           Resource  = [local.project_log_group_arn, "${local.project_log_group_arn}:*"]
           Condition = local.resource_tag_condition
         },
         {
           Sid       = "DeleteTaggedTopics"
           Effect    = "Allow"
-          Action    = ["sns:DeleteTopic", "sns:Unsubscribe"]
+          Action    = ["sns:DeleteTopic", "sns:GetSubscriptionAttributes", "sns:GetTopicAttributes", "sns:ListSubscriptionsByTopic", "sns:ListTagsForResource", "sns:Unsubscribe"]
           Resource  = local.project_topic_arn
           Condition = local.resource_tag_condition
         },
         {
           Sid      = "DeleteExactBudget"
           Effect   = "Allow"
-          Action   = ["budgets:ModifyBudget"]
+          Action   = ["budgets:ListTagsForResource", "budgets:ModifyBudget", "budgets:ViewBudget"]
           Resource = local.project_budget_arn
         },
       ]
