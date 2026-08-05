@@ -825,7 +825,7 @@ locals {
           Resource = [
             "arn:aws:ssm:${var.aws_region}::document/AWS-RunShellScript",
             "arn:aws:ssm:${var.aws_region}::document/AWS-StartNonInteractiveCommand",
-            "arn:aws:ssm:${var.aws_region}::document/SSM-SessionManagerRunShell",
+            "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:document/SSM-SessionManagerRunShell",
           ]
         },
         {

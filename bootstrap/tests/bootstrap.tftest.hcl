@@ -225,4 +225,9 @@ run "least_privilege_policy_regressions" {
     )
     error_message = "S3 flow-log delivery permissions must remain split between deploy and destroy."
   }
+
+  assert {
+    condition     = strcontains(local.deploy_policy_documents.services, "arn:aws:ssm:us-east-1:123456789012:document/SSM-SessionManagerRunShell")
+    error_message = "Session Manager access must target the account-scoped default session document ARN."
+  }
 }
