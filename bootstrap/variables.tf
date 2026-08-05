@@ -26,6 +26,17 @@ variable "github_repository" {
   default     = "aws-pam-access-showcase"
 }
 
+variable "github_oidc_subject_prefix" {
+  description = "Optional exact repository prefix from GitHub's OIDC customization endpoint; defaults to repo:<owner>/<repository>."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.github_oidc_subject_prefix == "" || can(regex("^repo:[^:]+$", var.github_oidc_subject_prefix))
+    error_message = "github_oidc_subject_prefix must be empty or an exact repo-scoped subject prefix."
+  }
+}
+
 variable "name_suffix" {
   description = "Lowercase suffix that makes global names unique."
   type        = string
